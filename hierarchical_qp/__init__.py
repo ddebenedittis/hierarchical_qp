@@ -1,1 +1,0 @@
-from hierarchical_qp.hierarchical_qp import HierarchicalQP
