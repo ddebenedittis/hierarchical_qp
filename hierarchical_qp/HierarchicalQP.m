@@ -28,7 +28,7 @@
 %   xi  = [ x ]
 %         [ w ]
 
-% ============================================================================
+% ============================================================================ %
 
 % Given a set of tasks T1, ..., Tn, for the task Tp the QP problem becomes:
 %   H   = [ Zq^T Ap^T Ap Zq, 0 ]
@@ -56,15 +56,15 @@ classdef HierarchicalQP
     
     methods(Static)
         function N = null_space_projector(A)
-            [~, nx] = size(A);
+            nx = size(A, 2);
             N = eye(nx) - pinv(A) * A;
         end
 
         function [A, b, C, d] = check_dimensions(A, b, C, d, we, wi, priorities)
             % CHECK_DIMENSIONS
-            % Raise ValueError if the dimension of the input matrices are
-            % not consistent. Additonally, None or empty matrices are
-            % converted into empty matrices of opportune size.
+            %   Raise ValueError if the dimension of the input matrices are
+            %   not consistent. Additonally, empty matrices are converted
+            %   into empty matrices of opportune size.
 
             arguments
                 A cell
@@ -78,7 +78,7 @@ classdef HierarchicalQP
             
             n_tasks = length(A);
             
-            [~, nx] = size(A{1});
+            nx = size(A{1}, 2);
             
             % Convert empty matrices or None into empty matrices of opportune size.
             for i = 1:n_tasks
@@ -159,24 +159,24 @@ classdef HierarchicalQP
 
     methods
         function x_star_bar = solve(obj, A, b, C, d, we, wi, priorities)
-            % SOLVE
+            % SOLVE Solve the hierarchical Quadratic Programming problem.
             %   x_star_bar = obj.solve(A, b, C, d, we, wi, priorities)
             %
             %   Given a set of tasks in the form
-            %       Ap x  = b \\
-            %       Cp x <= d, \\
-            %   with p = 1:p_max, return the optimal vector x_star that
+            %       Ap x  = b
+            %       Cp x <= d,
+            %   with p = 1:p_max, returns the optimal vector x_star that solves
             %   solves the hierarchical QP problem.
             %
             % Inputs:
-            %   A : list of Ap matrices of size (ne_p, nx)
-            %   b : list of bp vectors of size (ne_p)
-            %   C : list of Cp matrices of size (ni_p, nx)
-            %   d : list of dp vectors of size (ni_p)
-            %   we: list of we_p vectors of size (ne_p)
-            %   wi: list of wi_p vectors of size (ni_p)
-            %   priorities: list of ints representing the priorities of
-            %               the tasks, from 1 to p_max
+            %   A : cell array of Ap matrices of size (ne_p, nx)
+            %   b : cell array of bp vectors of size (ne_p)
+            %   C : cell array of Cp matrices of size (ni_p, nx)
+            %   d : cell array of dp vectors of size (ni_p)
+            %   we: cell array of we_p vectors of size (ne_p)
+            %   wi: cell array of wi_p vectors of size (ni_p)
+            %   priorities: vector of ints representing the priorities of the
+            %               tasks, from 1 to p_max
             %
             % Outputs:
             %   x_star_bar: optimal solution vector
@@ -193,13 +193,13 @@ classdef HierarchicalQP
             end
             
             
-            % ========================== Initialization ========================== %
+            % ======================== Initialization ======================== %
 
             % Number of tasks.
             n_tasks = length(A);
 
             % Dimension of the optimization vector.
-            [~, nx] = size(A{1});
+            nx = size(A{1}, 2);
 
             % Optimization vector.
             x_star_bar = zeros(nx, 1);
@@ -214,7 +214,7 @@ classdef HierarchicalQP
             [A, b, C, d] = obj.check_dimensions(A, b, C, d, we, wi, priorities);
 
 
-            % ==================================================================== %
+            % ================================================================ %
 
             for i = 1:n_tasks
                 % Priority of task i.
@@ -227,13 +227,15 @@ classdef HierarchicalQP
                 Ap = A{priority};
                 bp = b{priority};
                 
+                % Scale the matrices Ap and bp by we, if we is nonempty.
                 if ~isempty(we)
                     if ~isempty(we{priority})
                         Ap = we{priority} .* Ap;
                         bp = we{priority} .* bp;
                     end
                 end
-                        
+                       
+                % Scale the matrices Cp and dp by wi, if wi is nonempty.
                 if ~isempty(wi)
                     if ~isempty(wi{priority})
                         C{priority} = wi{priority} .* C{priority};
@@ -242,13 +244,14 @@ classdef HierarchicalQP
                 end
                 
                 % Slack variable dimension at task p.
-                [nw, ~] = size(C{priority});
+                nw = size(C{priority}, 1);
                 
                 
-                % See Kinematic Control of Redundant Manipulators: Generalizing the
-                % Task-Priority Framework to Inequality Task for the math behind it.
+                % See Kinematic Control of Redundant Manipulators: Generalizing
+                % the Task-Priority Framework to Inequality Task for the math
+                % behind it.
 
-                % ======================== Compute H And P ======================= %
+                % ====================== Compute H And P ===================== %
 
                 if ~isempty(Ap)
                     H = [
@@ -272,16 +275,16 @@ classdef HierarchicalQP
                 % Make H positive definite
                 H = H + obj.regularization * eye(size(H));
                 
-                % ================== Compute C_tilde And D_tilde ================= %
+                % ================ Compute C_tilde And D_tilde =============== %
 
-                [nC2, ~] = size(cat(1, C{1:priority}));
+                nC2 = size(cat(1, C{1:priority}), 1);
 
                 C_tilde = [
                                  zeros(nw,nx),       - eye(nw)
                     cat(1, C{1:priority}) * Z,   zeros(nC2,nw)
                 ];
                 if nw > 0
-                    C_tilde(end-nw:end, end-nw:end) = - eye(nw);
+                    C_tilde(end-nw+1:end, end-nw+1:end) = - eye(nw);
                 end
 
                 % w_star_arr = [w_star[priority], w_star[priority-1], ..., w_star[0]]
@@ -295,13 +298,8 @@ classdef HierarchicalQP
                 ];
 
 
-                % =========================== Solve The QP =========================== %
-                
-                % Quadprog library QP problem formulation
-                %   min  1/2 x^T H x - p^T x
-                %   s.t. CI^T x >= ci0
+                % ======================= Solve The QP ======================= %
 
-                % The quadprog library defines some matrices differently from here.
                 options =  optimset('Display','off');
                 if isempty(C_tilde)
                     sol = quadprog(H, p, [], [], [], [], [], [], [], options);
@@ -310,7 +308,7 @@ classdef HierarchicalQP
                 end
 
 
-                % ======================== Post-processing ======================= %
+                % ====================== Post-processing ===================== %
 
                 % Extract x_star from the solution.
                 x_star = sol(1:nx);
@@ -318,7 +316,7 @@ classdef HierarchicalQP
                 % Update the solution of all the tasks up to now.
                 x_star_bar = x_star_bar + Z * x_star;
 
-                % Store the history of w_star
+                % Store the history of w_star for the next priority.
                 if priority == 1
                     w_star_bar = {sol(nx+1:end)};
                 else
