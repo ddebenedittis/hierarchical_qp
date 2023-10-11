@@ -61,7 +61,7 @@ classdef HierarchicalQP
         end
 
         function [A, b, C, d] = check_dimensions(A, b, C, d, we, wi, priorities)
-            % CHECK_DIMENSIONS
+            %CHECK_DIMENSIONS
             %   Raise ValueError if the dimension of the input matrices are
             %   not consistent. Additonally, empty matrices are converted
             %   into empty matrices of opportune size.
@@ -119,21 +119,21 @@ classdef HierarchicalQP
                 
             for i = 1:n_tasks
                 if size(A{i}, 1) ~= size(b{i}, 1)
-                    error("At priority" + i + ", A and b have a different number of rows.")
+                    error("At priority " + i + ", A and b have a different number of rows.")
                 end
                     
                 if size(C{i}, 1) ~= size(d{i}, 1)
-                    error("At priority" + i + ", C and d have a different number of rows.")
+                    error("At priority " + i + ", C and d have a different number of rows.")
                 end
             end
 
             for i = 1:n_tasks
                 if size(A{i}, 2) ~= nx
-                    error("At priority" + i + ", A has " + size(A{i}, 2) + " columns instead of " + nx)
+                    error("At priority " + i + ", A has " + size(A{i}, 2) + " columns instead of " + nx)
                 end
                     
                 if size(C{i}, 2) ~= nx
-                    error("At priority" + i + ", C has " + size(C{i}, 2) + " columns instead of " + nx)
+                    error("At priority " + i + ", C has " + size(C{i}, 2) + " columns instead of " + nx)
                 end
             end
                     
@@ -159,7 +159,7 @@ classdef HierarchicalQP
 
     methods
         function x_star_bar = solve(obj, A, b, C, d, we, wi, priorities)
-            % SOLVE Solve the hierarchical Quadratic Programming problem.
+            %SOLVE Solve the hierarchical Quadratic Programming problem.
             %   x_star_bar = obj.solve(A, b, C, d, we, wi, priorities)
             %
             %   Given a set of tasks in the form
