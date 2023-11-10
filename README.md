@@ -24,5 +24,7 @@ d = [...]   # list of n_tasts vectors d of size (ne_i)
 x_star = hqp(A, b, C, d)
 ```
 
+If b[i] or d[i] are matrices, they are converted to vectors.
+
 ## Author
 Davide De Benedittis

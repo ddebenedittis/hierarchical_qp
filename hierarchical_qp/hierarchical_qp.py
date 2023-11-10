@@ -105,12 +105,16 @@ class HierarchicalQP:
                 
             if b[i] is None or b[i].size == 0:
                 b[i] = np.empty([0])
+            else:
+                b[i] = b[i].flatten()
             
             if C[i] is None or C[i].size == 0:
                 C[i] = np.empty([0,nx])
                 
             if d[i] is None or d[i].size == 0:
                 d[i] = np.empty([0])
+            else:
+                d[i] = d[i].flatten()
                 
         # Chech that the priorities list is correctly constructed
         if priorities is not None:
@@ -149,14 +153,14 @@ class HierarchicalQP:
                 
             if C[i].shape[1] != nx:
                 raise ValueError(
-                    f"At priority {i}, C has {A[i].shape[1]} columns instead of {nx}"
+                    f"At priority {i}, C has {C[i].shape[1]} columns instead of {nx}"
                 )
                 
         if we is not None:
-            for p, wi_p in enumerate(we):
-                if wi_p is not None and  wi_p.size != A[p].shape[0]:
+            for p, we_p in enumerate(we):
+                if we_p is not None and  we_p.size != A[p].shape[0]:
                     raise ValueError(
-                        f"At priority {p}, we has {wi_p.size} elements " + \
+                        f"At priority {p}, we has {we_p.size} elements " + \
                         f"instead of {A[p].shape[0]}"
                     )
                     
@@ -164,7 +168,7 @@ class HierarchicalQP:
             for p, wi_p in enumerate(wi):
                 if wi_p is not None and  wi_p.size != C[p].shape[0]:
                     raise ValueError(
-                        f"At priority {p}, we has {wi_p.size} elements " + \
+                        f"At priority {p}, wi has {wi_p.size} elements " + \
                         f"instead of {C[p].shape[0]}"
                     )
             
