@@ -1,21 +1,24 @@
-import setuptools
+from setuptools import find_packages, setup
 
-with open("README.md", "r", encoding="utf-8") as fh:
-    long_description = fh.read()
+package_name = 'hierarchical_qp'
 
-setuptools.setup(
-    name='hierarchical_qp',
-    version='0.0.1',
-    author='Davide De Benedittis',
-    author_email='davide.debenedittis@gmail.com',
-    description='Hierarchical Quadratic Programming implementation',
-    long_description=long_description,
-    long_description_content_type="text/markdown",
-    url='https://github.com/ddebenedittis/hierarchical_qp',
-    project_urls = {
-        "Bug Tracker": "https://github.com/ddebenedittis/hierarchical_qp/issues"
+setup(
+    name=package_name,
+    version='0.0.0',
+    packages=find_packages(exclude=['test']),
+    data_files=[
+        ('share/ament_index/resource_index/packages',
+            ['resource/' + package_name]),
+        ('share/' + package_name, ['package.xml']),
+    ],
+    install_requires=['setuptools'],
+    zip_safe=True,
+    maintainer='Davide De Benedittis',
+    maintainer_email='davide.debenedittis@gmail.com',
+    description='TODO: Package description',
+    license='TODO: License declaration',
+    tests_require=['pytest'],
+    entry_points={
+        'console_scripts': [],
     },
-    license='MIT',
-    packages=['hierarchical_qp'],
-    install_requires=['numpy', 'quadprog'],
 )

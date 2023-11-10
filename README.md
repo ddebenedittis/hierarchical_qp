@@ -4,15 +4,12 @@ An implementation of the framework described in [Kinematic Control of Redundant 
 
 ## Installation
 
-Just run the following command without downloading the repo to install it:
-```
-pip3 install git+https://github.com/ddebenedittis/hierarchical_qp.git
-```
+Install `numpy` and `quadprog`. Then, this can be considered as a normal ROS 2 Python package.
 
 ## Usage
 
 ```python
-from hierarchical_qp import HierarchicalQP
+from hierarchical_qp.hierarchical_qp import HierarchicalQP
 
 hqp = HierarchicalQP()
 
@@ -24,7 +21,6 @@ d = [...]   # list of n_tasts vectors d of size (ne_i)
 x_star = hqp(A, b, C, d)
 ```
 
-If b[i] or d[i] are matrices, they are converted to vectors.
-
 ## Author
+
 Davide De Benedittis
