@@ -324,5 +324,9 @@ class HierarchicalQP:
             # Compute the new null space projector (skipped at the last iteration).
             if ((Ap.shape[0] != 0) and (priority != n_tasks - 1)):
                 Z = Z @ null_space_projector(Ap @ Z)
+                
+            # End the loop if Z is the null matrix.
+            if not np.any((Z > self.regularization) | (Z < -self.regularization)):
+                return x_star_bar
 
         return x_star_bar
