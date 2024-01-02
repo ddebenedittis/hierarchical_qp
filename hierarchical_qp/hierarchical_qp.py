@@ -1,7 +1,16 @@
+from enum import auto, Enum
 import numpy as np
+from scipy.sparse import csc_matrix
 
+import osqp
 from quadprog import solve_qp
 
+
+
+class QPSolver(Enum):
+    """QP solver type."""
+    quadprog = auto()
+    osqp = auto()
 
 
 def null_space_projector(A):
@@ -67,9 +76,13 @@ def null_space_projector(A):
 # ============================================================================ #
 
 class HierarchicalQP:
-    def __init__(self):
+    def __init__(self, solver: QPSolver = QPSolver.quadprog):
         # Small number used to make H positive definite.
         self._regularization = 1e-6
+        
+        self.solver = solver
+        
+        self.osqp_solvers = []
         
     @property
     def regularization(self):
@@ -217,7 +230,9 @@ class HierarchicalQP:
         
         
         self.check_dimensions(A, b, C, d, we, wi, priorities)
-
+        
+        if len(A) != len(self.osqp_solvers):
+            self.osqp_solvers = [osqp.OSQP() for i in range(len(A))]
 
         # ==================================================================== #
 
@@ -302,10 +317,28 @@ class HierarchicalQP:
 
             # The quadprog library defines some matrices differently from here.
             if C_tilde.size == 0:
-                sol = solve_qp(H, -p)[0]
+                if self.solver == QPSolver.quadprog:
+                    sol = solve_qp(H, -p)[0]
+                elif self.solver == QPSolver.osqp:
+                    self.osqp_solvers[i].setup(
+                        csc_matrix(H), p,
+                        None, None, None,
+                        verbose=False
+                    )
+                    ret = self.osqp_solvers[i].solve()
+                    sol = ret.x
             else:
-                sol = solve_qp(H, -p, -C_tilde.T, -d_tilde)[0]
-
+                if self.solver == QPSolver.quadprog:
+                    sol = solve_qp(H, -p, -C_tilde.T, -d_tilde)[0]
+                elif self.solver == QPSolver.osqp:
+                    self.osqp_solvers[i].setup(
+                        csc_matrix(H), p,
+                        csc_matrix(C_tilde), None, d_tilde,
+                        verbose=False
+                    )
+                    ret = self.osqp_solvers[i].solve()
+                    sol = ret.x
+                        
 
             # ======================== Post-processing ======================= #
 
