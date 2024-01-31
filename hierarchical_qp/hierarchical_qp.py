@@ -329,7 +329,12 @@ class HierarchicalQP:
                     sol = ret.x
             else:
                 if self.solver == QPSolver.quadprog:
-                    sol = solve_qp(H, -p, -C_tilde.T, -d_tilde)[0]
+                    try:
+                        sol = solve_qp(H, -p, -C_tilde.T, -d_tilde)[0]
+                    except ValueError as e:
+                        print(f"At priority {priority}: " + str(e))
+                        return x_star_bar
+                    
                 elif self.solver == QPSolver.osqp:
                     self.osqp_solvers[i].setup(
                         csc_matrix(H), p,
