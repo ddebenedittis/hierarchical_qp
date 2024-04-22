@@ -1,14 +1,17 @@
 from enum import auto, Enum
 import numpy as np
-from scipy.sparse import csc_matrix
+# from scipy.sparse import csc_matrix
 
+import clarabel as cla
 import osqp
-from quadprog import solve_qp
+# from quadprog import solve_qp
+from qpsolvers import solve_qp
 
 
 
 class QPSolver(Enum):
     """QP solver type."""
+    clarabel = auto()
     quadprog = auto()
     osqp = auto()
 
@@ -317,32 +320,54 @@ class HierarchicalQP:
 
             # The quadprog library defines some matrices differently from here.
             if C_tilde.size == 0:
-                if self.solver == QPSolver.quadprog:
-                    sol = solve_qp(H, -p)[0]
-                elif self.solver == QPSolver.osqp:
-                    self.osqp_solvers[i].setup(
-                        csc_matrix(H), p,
-                        None, None, None,
-                        verbose=False
+                if self.solver == QPSolver.clarabel:
+                    sol = solve_qp(
+                        H, p, solver="clarabel",
+                        tol_feas = 1e-3, tol_gap_abs = 1e-3, tol_gap_rel = 0,
                     )
-                    ret = self.osqp_solvers[i].solve()
-                    sol = ret.x
+                elif self.solver == QPSolver.quadprog:
+                    # sol = solve_qp(H, -p)[0]
+                    sol = solve_qp(H, p, solver="quadprog")
+                elif self.solver == QPSolver.osqp:
+                    # self.osqp_solvers[i].setup(
+                    #     csc_matrix(H), p,
+                    #     None, None, None,
+                    #     verbose=False
+                    # )
+                    # ret = self.osqp_solvers[i].solve()
+                    # sol = ret.x
+                    sol = solve_qp(H, p, solver="quadprog")
             else:
-                if self.solver == QPSolver.quadprog:
+                if self.solver == QPSolver.clarabel:
+                    # settings = cla.DefaultSettings()
+                    # print(settings)
+                    sol = solve_qp(
+                        H, p, C_tilde, d_tilde, solver="clarabel",
+                        tol_feas = 1e-3, tol_gap_abs = 1e-3, tol_gap_rel = 0,
+                    )
+                    if sol is None:
+                        print(f"At priority {priority}: no solution.")
+                        return x_star_bar
+                elif self.solver == QPSolver.quadprog:
                     try:
-                        sol = solve_qp(H, -p, -C_tilde.T, -d_tilde)[0]
+                        # sol = solve_qp(H, -p, -C_tilde.T, -d_tilde)[0]
+                        sol = solve_qp(H, p, C_tilde, d_tilde, solver="quadprog")
                     except ValueError as e:
                         print(f"At priority {priority}: " + str(e))
                         return x_star_bar
                     
                 elif self.solver == QPSolver.osqp:
-                    self.osqp_solvers[i].setup(
-                        csc_matrix(H), p,
-                        csc_matrix(C_tilde), None, d_tilde,
-                        verbose=False
-                    )
-                    ret = self.osqp_solvers[i].solve()
-                    sol = ret.x
+                    # self.osqp_solvers[i].setup(
+                    #     csc_matrix(H), p,
+                    #     csc_matrix(C_tilde), None, d_tilde,
+                    #     verbose=False
+                    # )
+                    # ret = self.osqp_solvers[i].solve()
+                    # sol = ret.x
+                    sol = solve_qp(H, p, C_tilde, d_tilde, solver="osqp")
+                    if sol is None:
+                        print(f"At priority {priority}: no solution.")
+                        return x_star_bar
                         
 
             # ======================== Post-processing ======================= #
