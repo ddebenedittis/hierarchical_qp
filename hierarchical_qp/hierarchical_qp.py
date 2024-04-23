@@ -12,8 +12,16 @@ from qpsolvers import solve_qp
 class QPSolver(Enum):
     """QP solver type."""
     clarabel = auto()
-    quadprog = auto()
     osqp = auto()
+    quadprog = auto()
+    
+    def to_string(self):
+        if self is QPSolver.clarabel:
+            return "clarabel"
+        if self is QPSolver.osqp:
+            return "osqp"
+        if self is QPSolver.quadprog:
+            return "quadprog"
 
 
 def null_space_projector(A):
@@ -79,11 +87,16 @@ def null_space_projector(A):
 # ============================================================================ #
 
 class HierarchicalQP:
-    def __init__(self, solver: QPSolver = QPSolver.quadprog):
+    def __init__(
+        self, solver: QPSolver = QPSolver.quadprog,
+        hierarchical = False
+    ):
         # Small number used to make H positive definite.
         self._regularization = 1e-6
         
         self.solver = solver
+        
+        self.hierarchical = hierarchical
         
         self.osqp_solvers = []
         
@@ -103,7 +116,7 @@ class HierarchicalQP:
         
     
     @staticmethod
-    def check_dimensions(A, b, C, d, we, wi, priorities):
+    def _check_dimensions(A, b, C, d, we, wi, priorities):
         """
         Raise ValueError if the dimension of the input matrices are not consistent.
         Additonally, None or empty matrices are converted into empty matrices of
@@ -187,9 +200,67 @@ class HierarchicalQP:
                         f"At priority {p}, wi has {wi_p.size} elements " + \
                         f"instead of {C[p].shape[0]}"
                     )
-            
+                    
+    
+    def _solve_qp(self, H, p, C, d, priority):
+        # Quadprog library QP problem formulation
+        #   min  1/2 x^T H x - p^T x
+        #   s.t. CI^T x >= ci0
 
-    def __call__(
+        # The quadprog library defines some matrices differently from here.
+        if C.size == 0:
+            if self.solver == QPSolver.clarabel:
+                sol = solve_qp(
+                    H, p, solver="clarabel",
+                    tol_feas = 1e-3, tol_gap_abs = 1e-3, tol_gap_rel = 0,
+                )
+            elif self.solver == QPSolver.quadprog:
+                # sol = solve_qp(H, -p)[0]
+                sol = solve_qp(H, p, solver="quadprog")
+            elif self.solver == QPSolver.osqp:
+                # self.osqp_solvers[i].setup(
+                #     csc_matrix(H), p,
+                #     None, None, None,
+                #     verbose=False
+                # )
+                # ret = self.osqp_solvers[i].solve()
+                # sol = ret.x
+                sol = solve_qp(H, p, solver="quadprog")
+        else:
+            if self.solver == QPSolver.clarabel:
+                # settings = cla.DefaultSettings()
+                # print(settings)
+                sol = solve_qp(
+                    H, p, C, d, solver="clarabel",
+                    tol_feas = 1e-3, tol_gap_abs = 1e-3, tol_gap_rel = 0,
+                )
+                if sol is None:
+                    print(f"At priority {priority}: no solution.")
+                    return None
+            elif self.solver == QPSolver.quadprog:
+                try:
+                    # sol = solve_qp(H, -p, -C.T, -d)[0]
+                    sol = solve_qp(H, p, C, d, solver="quadprog")
+                except ValueError as e:
+                    print(f"At priority {priority}: " + str(e))
+                    return None
+                
+            elif self.solver == QPSolver.osqp:
+                # self.osqp_solvers[i].setup(
+                #     csc_matrix(H), p,
+                #     csc_matrix(C), None, d,
+                #     verbose=False
+                # )
+                # ret = self.osqp_solvers[i].solve()
+                # sol = ret.x
+                sol = solve_qp(H, p, C, d, solver="osqp")
+                if sol is None:
+                    print(f"At priority {priority}: no solution.")
+                    return None
+                
+        return sol
+
+    def _solve_hierarchical(
         self, A, b, C, d, we = None, wi = None, priorities = None
     ) -> np.ndarray:
         """
@@ -231,8 +302,6 @@ class HierarchicalQP:
         # Initialize the null space projector.
         Z = np.eye(nx)
         
-        
-        self.check_dimensions(A, b, C, d, we, wi, priorities)
         
         if len(A) != len(self.osqp_solvers):
             self.osqp_solvers = [osqp.OSQP() for i in range(len(A))]
@@ -318,57 +387,10 @@ class HierarchicalQP:
             #   min  1/2 x^T H x - p^T x
             #   s.t. CI^T x >= ci0
 
-            # The quadprog library defines some matrices differently from here.
-            if C_tilde.size == 0:
-                if self.solver == QPSolver.clarabel:
-                    sol = solve_qp(
-                        H, p, solver="clarabel",
-                        tol_feas = 1e-3, tol_gap_abs = 1e-3, tol_gap_rel = 0,
-                    )
-                elif self.solver == QPSolver.quadprog:
-                    # sol = solve_qp(H, -p)[0]
-                    sol = solve_qp(H, p, solver="quadprog")
-                elif self.solver == QPSolver.osqp:
-                    # self.osqp_solvers[i].setup(
-                    #     csc_matrix(H), p,
-                    #     None, None, None,
-                    #     verbose=False
-                    # )
-                    # ret = self.osqp_solvers[i].solve()
-                    # sol = ret.x
-                    sol = solve_qp(H, p, solver="quadprog")
-            else:
-                if self.solver == QPSolver.clarabel:
-                    # settings = cla.DefaultSettings()
-                    # print(settings)
-                    sol = solve_qp(
-                        H, p, C_tilde, d_tilde, solver="clarabel",
-                        tol_feas = 1e-3, tol_gap_abs = 1e-3, tol_gap_rel = 0,
-                    )
-                    if sol is None:
-                        print(f"At priority {priority}: no solution.")
-                        return x_star_bar
-                elif self.solver == QPSolver.quadprog:
-                    try:
-                        # sol = solve_qp(H, -p, -C_tilde.T, -d_tilde)[0]
-                        sol = solve_qp(H, p, C_tilde, d_tilde, solver="quadprog")
-                    except ValueError as e:
-                        print(f"At priority {priority}: " + str(e))
-                        return x_star_bar
-                    
-                elif self.solver == QPSolver.osqp:
-                    # self.osqp_solvers[i].setup(
-                    #     csc_matrix(H), p,
-                    #     csc_matrix(C_tilde), None, d_tilde,
-                    #     verbose=False
-                    # )
-                    # ret = self.osqp_solvers[i].solve()
-                    # sol = ret.x
-                    sol = solve_qp(H, p, C_tilde, d_tilde, solver="osqp")
-                    if sol is None:
-                        print(f"At priority {priority}: no solution.")
-                        return x_star_bar
-                        
+            sol = self._solve_qp(H, p, C_tilde, d_tilde, priority)
+            if sol is None:
+                return x_star_bar
+
 
             # ======================== Post-processing ======================= #
 
@@ -393,3 +415,103 @@ class HierarchicalQP:
                 return x_star_bar
 
         return x_star_bar
+    
+    
+    def _solve_weighted(
+        self, A, b, C, d, we = None, wi = None, priorities = None
+    ) -> np.ndarray:
+        n_tasks = len(A)
+        
+        if we is None:
+            we = [1 for _ in range(n_tasks)]
+        if wi is None:
+            wi = [1 for _ in range(n_tasks)]
+                
+        nx = A[0].shape[1]
+        
+        n_eq = sum([A[p].shape[0] if we[p] == np.inf and A[p] is not None else 0 for p in range(n_tasks)])
+        n_ie = sum([C[p].shape[0] if C[p] is not None else 0 for p in range(n_tasks)])
+        n_slack = sum([C[p].shape[0] if wi[p] != np.inf and C[p] is not None else 0 for p in range(n_tasks)])
+        
+        # Initialize the matrices
+        A_tot = np.zeros((n_eq, nx + n_slack))
+        b_tot = np.zeros(n_eq)
+        
+        C_tot = np.zeros((n_ie, nx + n_slack))
+        d_tot = np.zeros(n_ie)
+        
+        H_tot = np.zeros((nx + n_slack, nx + n_slack))
+        p_tot = np.zeros(nx + n_slack)
+        
+        
+        ie = 0
+        ii = 0
+        i_slack = 0
+        for i in range(n_tasks):
+            # Priority of task i.
+            if priorities is None:
+                priority = i
+            else:
+                priority = priorities.index(i)
+                
+            Ap = A[priority]
+            bp = b[priority]
+            Cp = C[priority]
+            dp = d[priority]
+            wep = we[priority]
+            wip = wi[priority]
+                
+            H_tot[0:nx, 0:nx] += Ap.transpose() @ Ap * wep**2
+            p_tot[0:nx] += - Ap.transpose() @ bp * wep**2
+            if wip is not np.Inf:
+                H_tot[nx+i_slack:nx+i_slack+Cp.shape[0], nx+i_slack:nx+i_slack+Cp.shape[0]] = np.eye(Cp.shape[0]) * wip**2
+            
+            if wep is np.Inf and Ap is not None:
+                A_tot[ie:ie+Ap.shape[0], 0:nx] = Ap
+                b_tot[ie:ie+Ap.shape[0]] = bp
+                ie += Ap.shape[0]
+            if Cp is not None:
+                C_tot[ii:ii+Cp.shape[0], 0:nx] = Cp
+                d_tot[ii:ii+Cp.shape[0]] = dp
+                if wip is not np.Inf:
+                    C_tot[ii:ii+Cp.shape[0], nx+i_slack:nx+i_slack+Cp.shape[0]] = - np.eye(Cp.shape[0])
+                    i_slack += Cp.shape[0]
+                    
+                ii += Cp.shape[0]
+            
+        
+        sol = solve_qp(H_tot, p_tot, C_tot, d_tot, A_tot, b_tot, solver=self.solver.to_string())
+                
+        return sol[0:nx]
+
+
+    def __call__(
+        self, A, b, C, d, we = None, wi = None, priorities = None
+    ) -> np.ndarray:
+        """
+        Given a set of tasks in the form \\
+        Ap x  = b \\
+        Cp x <= d, \\
+        with p = 1:p_max, return the optimal vector x_star that solves the
+        hierarchical QP problem.
+
+        Args:
+            A (list[np.ndarray]): list of Ap matrices of size (ne_p, nx)
+            b (list[np.ndarray]): list of bp vectors of size (ne_p)
+            C (list[np.ndarray]): list of Cp matrices of size (ni_p, nx)
+            d (list[np.ndarray]): list of dp vectors of size (ni_p)
+            we (list[np.ndarray]): list of we_p vectors of size (ne_p)
+            wi (list[np.ndarray]): list of wi_p vectors of size (ni_p)
+            priorities (list[int]): list of ints representing the priorities of
+                                    the tasks, from 0 to p_max - 1
+
+        Returns:
+            np.ndarray: optimal solution vector
+        """
+        
+        self._check_dimensions(A, b, C, d, we, wi, priorities)
+        
+        if self.hierarchical:
+            return self._solve_hierarchical(A, b, C, d, we, wi, priorities)
+        
+        return self._solve_weighted(A, b, C, d, we, wi, priorities)
