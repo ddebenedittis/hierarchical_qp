@@ -4,7 +4,10 @@ An implementation of the framework described in [Kinematic Control of Redundant 
 
 ## Installation
 
-Install `numpy`, `osqp`, `quadprog`, and `scipy`. Then, this can be considered as a normal ROS 2 Python package.
+Install the Python requirements with
+```shell
+pip install -r requirements.txt
+```
 
 ## Usage
 
@@ -12,7 +15,7 @@ Install `numpy`, `osqp`, `quadprog`, and `scipy`. Then, this can be considered a
 from hierarchical_qp.hierarchical_qp import HierarchicalQP, QPSolver
 
 solver = QPSolver.quadprog  # or QPSolver.osqp
-hqp = HierarchicalQP(solver = solver)
+hqp = HierarchicalQP(solver=solver, hierarchical=True)
 
 A = [...]   # list of n_tasts matrices A _of_ size (ne_i, nx)
 b = [...]   # list of n_tasts vectors b of size (ne_i)
@@ -22,9 +25,9 @@ d = [...]   # list of n_tasts vectors d of size (ne_i)
 x_star = hqp(A, b, C, d)
 ```
 
-If a task has no equality or inequality part at a certain priority, use `None`.
+If a task has no equality or inequality part at a certain priority, you can use `None`.
 
-The first task should have an equality contraint part.
+The first task must have an equality constraint part.
 
 ## Author
 

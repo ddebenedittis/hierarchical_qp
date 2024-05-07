@@ -1,18 +1,16 @@
 from enum import auto, Enum
 import numpy as np
-# from scipy.sparse import csc_matrix
 
-import clarabel as cla
-import osqp
-# from quadprog import solve_qp
 from qpsolvers import solve_qp
 
 
 
 class QPSolver(Enum):
     """QP solver type."""
+    
     clarabel = auto()
     osqp = auto()
+    proxqp = auto()
     quadprog = auto()
     
     def to_string(self):
@@ -20,8 +18,37 @@ class QPSolver(Enum):
             return "clarabel"
         if self is QPSolver.osqp:
             return "osqp"
+        if self is QPSolver.proxqp:
+            return "proxqp"
         if self is QPSolver.quadprog:
             return "quadprog"
+        
+    def get_solver_opts(self):
+        if self is QPSolver.clarabel:
+            return {'tol_feas': 1e-3, 'tol_gap_abs': 1e-3, 'tol_gap_rel': 0}
+        if self is QPSolver.osqp:
+            return {}
+        if self is QPSolver.quadprog:
+            return {}
+        else:
+            return {}
+        
+    @classmethod
+    def get_enum(cls, solver):
+        if type(solver) == QPSolver:
+            return solver
+        if solver == 'quadprog':
+            return QPSolver.quadprog
+        if solver == 'osqp':
+            return QPSolver.osqp
+        if solver == 'proxqp':
+            return QPSolver.proxqp
+        if solver == 'clarabel':
+            return QPSolver.clarabel
+        
+        raise ValueError('The input solver is {solver}. Acceptable values are ' +
+                         'clarabel, osqp, and quadprog.')
+        
 
 
 def null_space_projector(A):
@@ -97,9 +124,7 @@ class HierarchicalQP:
         self.solver = solver
         
         self.hierarchical = hierarchical
-        
-        self.osqp_solvers = []
-        
+                
     @property
     def regularization(self):
         return self._regularization
@@ -187,7 +212,9 @@ class HierarchicalQP:
                 
         if we is not None:
             for p, we_p in enumerate(we):
-                if we_p is not None and  we_p.size != A[p].shape[0]:
+                if we_p is not None and isinstance(we_p, (int, float)):
+                    pass
+                elif we_p is not None and we_p.size != A[p].shape[0]:
                     raise ValueError(
                         f"At priority {p}, we has {we_p.size} elements " + \
                         f"instead of {A[p].shape[0]}"
@@ -195,7 +222,9 @@ class HierarchicalQP:
                     
         if wi is not None:
             for p, wi_p in enumerate(wi):
-                if wi_p is not None and  wi_p.size != C[p].shape[0]:
+                if wi_p is not None and isinstance(wi_p, (int, float)):
+                    pass
+                elif wi_p is not None and wi_p.size != C[p].shape[0]:
                     raise ValueError(
                         f"At priority {p}, wi has {wi_p.size} elements " + \
                         f"instead of {C[p].shape[0]}"
@@ -207,56 +236,13 @@ class HierarchicalQP:
         #   min  1/2 x^T H x - p^T x
         #   s.t. CI^T x >= ci0
 
-        # The quadprog library defines some matrices differently from here.
         if C.size == 0:
-            if self.solver == QPSolver.clarabel:
-                sol = solve_qp(
-                    H, p, solver="clarabel",
-                    tol_feas = 1e-3, tol_gap_abs = 1e-3, tol_gap_rel = 0,
-                )
-            elif self.solver == QPSolver.quadprog:
-                # sol = solve_qp(H, -p)[0]
-                sol = solve_qp(H, p, solver="quadprog")
-            elif self.solver == QPSolver.osqp:
-                # self.osqp_solvers[i].setup(
-                #     csc_matrix(H), p,
-                #     None, None, None,
-                #     verbose=False
-                # )
-                # ret = self.osqp_solvers[i].solve()
-                # sol = ret.x
-                sol = solve_qp(H, p, solver="quadprog")
+            sol = solve_qp(H, p, solver=self.solver.to_string(), **self.solver.get_solver_opts())
         else:
-            if self.solver == QPSolver.clarabel:
-                # settings = cla.DefaultSettings()
-                # print(settings)
-                sol = solve_qp(
-                    H, p, C, d, solver="clarabel",
-                    tol_feas = 1e-3, tol_gap_abs = 1e-3, tol_gap_rel = 0,
-                )
-                if sol is None:
-                    print(f"At priority {priority}: no solution.")
-                    return None
-            elif self.solver == QPSolver.quadprog:
-                try:
-                    # sol = solve_qp(H, -p, -C.T, -d)[0]
-                    sol = solve_qp(H, p, C, d, solver="quadprog")
-                except ValueError as e:
-                    print(f"At priority {priority}: " + str(e))
-                    return None
-                
-            elif self.solver == QPSolver.osqp:
-                # self.osqp_solvers[i].setup(
-                #     csc_matrix(H), p,
-                #     csc_matrix(C), None, d,
-                #     verbose=False
-                # )
-                # ret = self.osqp_solvers[i].solve()
-                # sol = ret.x
-                sol = solve_qp(H, p, C, d, solver="osqp")
-                if sol is None:
-                    print(f"At priority {priority}: no solution.")
-                    return None
+            sol = solve_qp(H, p, C, d, solver=self.solver.to_string(), **self.solver.get_solver_opts())
+            if sol is None:
+                print(f"At priority {priority}: no solution.")
+                return None
                 
         return sol
 
@@ -301,10 +287,6 @@ class HierarchicalQP:
 
         # Initialize the null space projector.
         Z = np.eye(nx)
-        
-        
-        if len(A) != len(self.osqp_solvers):
-            self.osqp_solvers = [osqp.OSQP() for i in range(len(A))]
 
         # ==================================================================== #
 
@@ -320,12 +302,18 @@ class HierarchicalQP:
             
             if we is not None:
                 if we[priority] is not None:
-                    Ap = Ap * we[priority][:, np.newaxis]
+                    if isinstance(we[priority], (int, float)):
+                        Ap = Ap * we[priority]
+                    else:
+                        Ap = Ap * we[priority][:, np.newaxis]
                     bp = bp * we[priority]
                     
             if wi is not None:
                 if wi[priority] is not None:
-                    C[priority] = C[priority] * wi[priority][:, np.newaxis]
+                    if isinstance(wi[priority], (int, float)):
+                        C[priority] = C[priority] * wi[priority]
+                    else:
+                        C[priority] = C[priority] * wi[priority][:, np.newaxis]
                     d[priority] = d[priority] * wi[priority]
             
             # Slack variable dimension at task p.
