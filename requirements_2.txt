@@ -1,0 +1,5 @@
+cvxpy==1.5.1
+reluqp @ git+https://github.com/RoboticExplorationLab/ReLUQP-py@aad063a73c9f64724e271bb070f7096a3b70a5b6
+torch==2.3.0
+torchaudio==2.3.0
+torchvision==0.18.0

@@ -3,6 +3,14 @@ import numpy as np
 
 from qpsolvers import solve_qp
 
+try:
+    from torch import from_numpy
+    from torch import device
+    from torch.cuda import is_available
+    import reluqp.reluqpth as reluqp
+except ImportError:
+    torch_available = False
+
 
 
 class QPSolver(Enum):
@@ -12,6 +20,7 @@ class QPSolver(Enum):
     osqp = auto()
     proxqp = auto()
     quadprog = auto()
+    reluqp = auto()
     
     def to_string(self):
         if self is QPSolver.clarabel:
@@ -22,6 +31,8 @@ class QPSolver(Enum):
             return "proxqp"
         if self is QPSolver.quadprog:
             return "quadprog"
+        if self is QPSolver.reluqp:
+            return "reluqp"
         
     def get_solver_opts(self):
         if self is QPSolver.clarabel:
@@ -30,6 +41,8 @@ class QPSolver(Enum):
             return {}
         if self is QPSolver.quadprog:
             return {}
+        if self is QPSolver.reluqp:
+            return {}
         else:
             return {}
         
@@ -37,17 +50,19 @@ class QPSolver(Enum):
     def get_enum(cls, solver):
         if type(solver) == QPSolver:
             return solver
-        if solver == 'quadprog':
-            return QPSolver.quadprog
+        if solver == 'clarabel':
+            return QPSolver.clarabel
         if solver == 'osqp':
             return QPSolver.osqp
         if solver == 'proxqp':
             return QPSolver.proxqp
-        if solver == 'clarabel':
-            return QPSolver.clarabel
+        if solver == 'quadprog':
+            return QPSolver.quadprog
+        if solver == 'reluqp':
+            return QPSolver.reluqp
         
         raise ValueError('The input solver is {solver}. Acceptable values are ' +
-                         'clarabel, osqp, and quadprog.')
+                         'clarabel, osqp, proxqp, quadprog, and reluqp.')
         
 
 
@@ -121,10 +136,13 @@ class HierarchicalQP:
         # Small number used to make H positive definite.
         self._regularization = 1e-6
         
-        self.solver = solver
+        self._solver = solver
+        if not torch_available and self._solver.to_string() == "reluqp":
+            raise ValueError("The solver cannot be ReluQP if torch and others "
+                             "are not available.")
         
         self.hierarchical = hierarchical
-                
+                        
     @property
     def regularization(self):
         return self._regularization
@@ -138,6 +156,24 @@ class HierarchicalQP:
             self._regularization = float(value)
         except ValueError:
             raise ValueError('"regularization" must be a positive number') from None
+        
+    @property
+    def solver(self):
+        return self._solver
+    
+    @solver.setter
+    def solver(self, value):
+        if not torch_available and self._solver.to_string() == "reluqp":
+            raise ValueError("The solver cannot be ReluQP if torch and others "
+                             "are not available.")
+        
+        if isinstance(value, QPSolver):
+            self._solver = value
+        elif isinstance(value, str):
+            self._solver = QPSolver.get_enum(value)
+        else:
+            raise ValueError(f"The solver must be either a string or a QPSolver."
+                             f"{type(value)} is not an acceptable value.")
         
     
     @staticmethod
@@ -237,9 +273,35 @@ class HierarchicalQP:
         #   s.t. CI^T x >= ci0
 
         if C.size == 0:
-            sol = solve_qp(H, p, solver=self.solver.to_string(), **self.solver.get_solver_opts())
+            if self._solver == QPSolver.reluqp:
+                sol = solve_qp(H, p, solver='quadprog', **self._solver.get_solver_opts())
+            else:
+                sol = solve_qp(H, p, solver=self._solver.to_string(), **self._solver.get_solver_opts())
         else:
-            sol = solve_qp(H, p, C, d, solver=self.solver.to_string(), **self.solver.get_solver_opts())
+            if self._solver == QPSolver.reluqp:
+                def my_from_numpy(
+                    array: np.ndarray,
+                    device = device("cuda" if is_available() else "cpu"),):
+                    return from_numpy(array).float().to(device)
+                
+                model = reluqp.ReLU_QP()
+                l = -np.inf * np.ones(d.shape)
+                
+                device = device("cuda" if is_available() else "cpu")
+                
+                model.setup(
+                    my_from_numpy(H, device), my_from_numpy(p, device),
+                    my_from_numpy(C, device), my_from_numpy(l, device),
+                    my_from_numpy(d, device),
+                )
+                
+                results = model.solve()
+                if results.info.status == 'solved':
+                    sol = results.x.detach().cpu().numpy()
+                else:
+                    sol = None
+            else:
+                sol = solve_qp(H, p, C, d, solver=self._solver.to_string(), **self._solver.get_solver_opts())
             if sol is None:
                 print(f"At priority {priority}: no solution.")
                 return None
@@ -468,7 +530,7 @@ class HierarchicalQP:
                 ii += Cp.shape[0]
             
         
-        sol = solve_qp(H_tot, p_tot, C_tot, d_tot, A_tot, b_tot, solver=self.solver.to_string())
+        sol = solve_qp(H_tot, p_tot, C_tot, d_tot, A_tot, b_tot, solver=self._solver.to_string())
                 
         return sol[0:nx]
 

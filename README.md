@@ -9,6 +9,11 @@ Install the Python requirements with
 pip install -r requirements.txt
 ```
 
+To use ReLuQP, you need to install pytorch and other bigger libraries with
+```shell
+pip install -r requirements_2.txt
+```
+
 ## Usage
 
 ```python
