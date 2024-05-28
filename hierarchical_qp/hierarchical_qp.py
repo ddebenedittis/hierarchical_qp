@@ -8,6 +8,7 @@ try:
     from torch import device
     from torch.cuda import is_available
     import reluqp.reluqpth as reluqp
+    torch_available = True
 except ImportError:
     torch_available = False
 
