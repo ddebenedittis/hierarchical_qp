@@ -5,7 +5,7 @@ from qpsolvers import solve_qp
 
 try:
     from torch import from_numpy
-    from torch import device
+    from torch import device as t_device
     from torch.cuda import is_available
     import reluqp.reluqpth as reluqp
     torch_available = True
@@ -282,13 +282,13 @@ class HierarchicalQP:
             if self._solver == QPSolver.reluqp:
                 def my_from_numpy(
                     array: np.ndarray,
-                    device = device("cuda" if is_available() else "cpu"),):
+                    device = t_device("cuda" if is_available() else "cpu"),):
                     return from_numpy(array).float().to(device)
                 
                 model = reluqp.ReLU_QP()
                 l = -np.inf * np.ones(d.shape)
                 
-                device = device("cuda" if is_available() else "cpu")
+                device = t_device("cuda" if is_available() else "cpu")
                 
                 model.setup(
                     my_from_numpy(H, device), my_from_numpy(p, device),
