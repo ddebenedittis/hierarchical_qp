@@ -9,21 +9,21 @@
 
 % where v and w are slack variables.
 
-% Is is formulated as a QP problem
+% It is formulated as a QP problem
 %   min_x 1/2 (A x - b)^2 + 1/2 w^2
 %   s.t.: C x - d <= w
 
 
 % It can be rewritten in the general QP form:
 %   min_x 1/2 xi^T H xi + p^T xi
-%   s.t: CI xi + ci0 >= 0
+%   s.t: C_tilde xi - d_tilde <= 0
 
 % where:
 %   H   =   A^T A
 %   p   = - A^T b
-%   CI  = [ -C, 0 ]
-%         [  0, I ]
-%   ci0 = [ d ]
+%   C_tilde  =  [ C, 0 ]
+%               [ 0, -I ]
+%   d_tilde = [ d ]
 %         [ 0 ]
 %   xi  = [ x ]
 %         [ w ]
@@ -36,10 +36,10 @@
 %   p   = [ Zq^T Ap^T (Ap x_opt - bp) ]
 %         [                         0 ]
 
-%   CI  = [   0,       I      ]
-%         [ - C_stack, [0; I] ]
-%   ci0 = [ 0                                    ]
-%         [ d - C_stack x_opt + [w_opt_stack; 0] ]
+%   C_tilde  =  [   0,       -I      ]
+%               [   C_stack, [0; -I] ]
+%   d_tilde =   [ 0                                    ]
+%               [ d - C_stack x_opt + [w_opt_stack; 0] ]
 
 % The solution of the task with priority p is x_p_star
 
@@ -60,7 +60,7 @@ classdef HierarchicalQP
             N = eye(nx) - pinv(A) * A;
         end
 
-        function [A, b, C, d] = check_dimensions(A, b, C, d, we, wi, priorities)
+        function [A, b, C, d] = check_dimensions(A, b, C, d, we, wi, priorities, x_init)
             %CHECK_DIMENSIONS
             %   Raise ValueError if the dimension of the input matrices are
             %   not consistent. Additonally, empty matrices are converted
@@ -74,6 +74,7 @@ classdef HierarchicalQP
                 we cell = {}
                 wi cell = {}
                 priorities = []
+                x_init = [] % FK: initial value 
             end
             
             n_tasks = length(A);
@@ -87,7 +88,7 @@ classdef HierarchicalQP
                 end
                     
                 if isempty(b{i})
-                    b{i} = zeros(0);
+                    b{i} = zeros(0,1);
                 end
                 
                 if isempty(C{i})
@@ -95,17 +96,25 @@ classdef HierarchicalQP
                 end
                     
                 if isempty(d{i})
-                    d{i} = zeros(0);
+                    d{i} = zeros(0,1);
                 end
             end
                     
             % Chech that the priorities list is correctly constructed
             if ~isempty(priorities)
                 for i = 1:n_tasks
-                    if ismember(i, priorities)
+                    if ~ismember(i, priorities) % FK:?
                         error("priorities is ill formed: priorities = " + ...
                             num2str(priorities))
                     end
+                end
+            end
+            
+            % FK: Chech that the initial value dimension match with the
+            % variable
+            if ~isempty(x_init)
+                if length(x_init) ~= nx
+                    error("initial value dimension doesn't match ")
                 end
             end
             
@@ -158,7 +167,7 @@ classdef HierarchicalQP
     end
 
     methods
-        function x_star_bar = solve(obj, A, b, C, d, we, wi, priorities)
+        function x_star_bar = solve(obj, A, b, C, d, we, wi, priorities, x_init)
             %SOLVE Solve the hierarchical Quadratic Programming problem.
             %   x_star_bar = obj.solve(A, b, C, d, we, wi, priorities)
             %
@@ -190,6 +199,7 @@ classdef HierarchicalQP
                 we cell = {}
                 wi cell = {}
                 priorities = []
+                x_init = [] % FK: initial value 
             end
             
             
@@ -205,46 +215,46 @@ classdef HierarchicalQP
             x_star_bar = zeros(nx, 1);
             
             % History of the slack variables, stored as a list of np.arrays.
-            w_star_bar = {zeros(0, 1)};
+            w_star_bar = cell(n_tasks,1);
 
             % Initialize the null space projector.
             Z = eye(nx);
             
             
-            [A, b, C, d] = obj.check_dimensions(A, b, C, d, we, wi, priorities);
+            [A, b, C, d] = obj.check_dimensions(A, b, C, d, we, wi, priorities, x_init);
 
 
             % ================================================================ %
 
-            for i = 1:n_tasks
+            for priority = 1:n_tasks
                 % Priority of task i.
                 if isempty(priorities)
-                    priority = i;
+                    index = priority;
                 else
-                    priority = find(priorities == i);
+                    index = find(priorities == priority);
                 end
                 
-                Ap = A{priority};
-                bp = b{priority};
+                Ap = A{index};
+                bp = b{index};
                 
                 % Scale the matrices Ap and bp by we, if we is nonempty.
                 if ~isempty(we)
-                    if ~isempty(we{priority})
-                        Ap = we{priority} .* Ap;
-                        bp = we{priority} .* bp;
+                    if ~isempty(we{index})
+                        Ap = we{index} .* Ap;
+                        bp = we{index} .* bp;
                     end
                 end
                        
                 % Scale the matrices Cp and dp by wi, if wi is nonempty.
                 if ~isempty(wi)
-                    if ~isempty(wi{priority})
-                        C{priority} = wi{priority} .* C{priority};
-                        d{priority} = wi{priority} .* d{priority};
+                    if ~isempty(wi{index})
+                        C{index} = wi{index} .* C{index};
+                        d{index} = wi{index} .* d{index};
                     end
                 end
                 
                 % Slack variable dimension at task p.
-                nw = size(C{priority}, 1);
+                nw = size(C{index}, 1);
                 
                 
                 % See Kinematic Control of Redundant Manipulators: Generalizing
@@ -261,7 +271,7 @@ classdef HierarchicalQP
 
                     p = [
                         Z.' * Ap.' * (Ap * x_star_bar - bp)
-                        zeros(nw, 1)
+                        zeros(nw, 1);
                     ];
                 else
                     H = [
@@ -276,56 +286,94 @@ classdef HierarchicalQP
                 H = H + obj.regularization * eye(size(H));
                 
                 % ================ Compute C_tilde And D_tilde =============== %
+                dim_array = zeros(index,1);
+                for m = 1:index
+                    dim_array(m) = size(C{m},1);
+                    % dim_C_cat = dim_C_cat + size(C{m},1);
+                    % if m > 1
+                    % dim_w_starr = dim_w_starr + size(C{m-1},1);
+                    % end
+                end
 
-                nC2 = size(cat(1, C{1:priority}), 1);
+                dim_C_cat = sum(dim_array);
 
-                C_tilde = [
-                                 zeros(nw,nx),       - eye(nw)
-                    cat(1, C{1:priority}) * Z,   zeros(nC2,nw)
+                C_cat = zeros(dim_C_cat,nx);
+                d_cat = zeros(dim_C_cat,1);
+                w_star_arr = zeros(dim_C_cat,1);
+
+                row_count = 0;
+                for m = 1:index
+                    if dim_array(m) > 0
+                        C_cat(row_count+1:row_count+dim_array(m),:) = C{m};
+                        d_cat(row_count+1:row_count+dim_array(m),:) = d{m};
+                        
+                        if m ~= index
+                            w_star_arr(row_count+1:row_count+dim_array(m),:) = w_star_bar{m};
+                        end
+                        row_count = row_count+dim_array(m);
+                    end
+                end
+
+                nC2 = size(C_cat, 1);
+
+                C_tilde = [ zeros(nw,nx),       - eye(nw)
+                            C_cat * Z,   zeros(nC2,nw)
                 ];
                 if nw > 0
                     C_tilde(end-nw+1:end, end-nw+1:end) = - eye(nw);
+                    w_star_arr(end-nw+1:end,1) = zeros(nw,1);
                 end
 
-                % w_star_arr = [w_star[priority], w_star[priority-1], ..., w_star[0]]
-                w_star_arr = cat(1, w_star_bar{:});
 
                 d_tilde = [
-                    zeros(nw, 1)
-                    cat(1, d{1:priority}) ...
-                        - cat(1, C{1:priority}) * x_star_bar ...
-                        + [w_star_arr; zeros(nw, 1)]
+                    zeros(nw, 1);
+                    d_cat ...
+                        - C_cat * x_star_bar ...
+                        + w_star_arr % + [w_star_arr; zeros(nw, 1)]
                 ];
-
 
                 % ======================= Solve The QP ======================= %
 
-                options =  optimset('Display','off');
-                if isempty(C_tilde)
-                    sol = quadprog(H, p, [], [], [], [], [], [], [], options);
+                % options =  optimset('Display','off');
+                options = optimoptions('quadprog','Algorithm','active-set');
+                if priority == 1
+                    x_km1 = x_init;
                 else
-                    sol = quadprog(H, p, C_tilde, d_tilde, [], [], [], [], [], options);
+                    x_km1 = zeros(nx+nw,1);
                 end
 
+                if isempty(C_tilde)
+                    [sol,~,exitflag,~]  = quadprog(H, p, [], [], [], [], [], [], x_km1, options);
+                else
+                    [sol,~,exitflag,~] = quadprog(H, p, C_tilde, d_tilde, [], [], [], [], x_km1, options);
+                end
+                
+                % FK: check if the solver found the optimal solution
+                if exitflag ~= 1
+                    warning("Solver cannot find the converged solution at " + priority + " task!");
+                    return;
+                end
 
                 % ====================== Post-processing ===================== %
 
                 % Extract x_star from the solution.
-                x_star = sol(1:nx);
+                x_star = zeros(nx,1);
+                x_star(:,1) = sol(1:nx);
                 
                 % Update the solution of all the tasks up to now.
                 x_star_bar = x_star_bar + Z * x_star;
 
                 % Store the history of w_star for the next priority.
-                if priority == 1
-                    w_star_bar = {sol(nx+1:end)};
-                else
-                    w_star_bar{end+1} = sol(nx+1:end);
-                end
+                w_star_bar{priority} = sol(nx+1:end);
 
                 % Compute the new null space projector (skipped at the last iteration).
                 if (~isempty(Ap)) && (priority ~= n_tasks)
                     Z = Z * obj.null_space_projector(Ap * Z);
+                    % FK: check if the null space is empty
+                    if rank(Z,1e-10) == 0
+                        error("Null space of " + priority + " task is empty!");
+                        return;
+                    end
                 end
             end
         end
