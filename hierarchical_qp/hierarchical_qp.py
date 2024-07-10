@@ -143,6 +143,11 @@ class HierarchicalQP:
                              "are not available.")
         
         self.hierarchical = hierarchical
+        
+        self.x = None
+        self.z = None
+        self.lam = None
+        self.rho = None
                         
     @property
     def regularization(self):
@@ -296,11 +301,28 @@ class HierarchicalQP:
                     my_from_numpy(d, device),
                 )
                 
+                if self.x[priority] is not None:
+                    print(type(self.x[priority]))
+                    print(type(self.z[priority]))
+                    print(type(self.lam[priority]))
+                    
+                    model.warm_start(
+                        x = self.x[priority],
+                        z = self.z[priority],
+                        lam = self.lam[priority],
+                        # rho = self.rho[priority],
+                    )
+                
                 results = model.solve()
                 if results.info.status == 'solved':
                     sol = results.x.detach().cpu().numpy()
                 else:
                     sol = None
+                
+                self.x[priority] = model.x
+                self.z[priority] = model.z
+                self.lam[priority] = model.lam
+                self.rho[priority] = results.info.rho_estimate
             else:
                 sol = solve_qp(H, p, C, d, solver=self._solver.to_string(), **self._solver.get_solver_opts())
             if sol is None:
@@ -352,6 +374,12 @@ class HierarchicalQP:
         Z = np.eye(nx)
 
         # ==================================================================== #
+                
+        if self.x is None or len(self.x) != n_tasks:
+            self.x = [None for _ in range(n_tasks)]
+            self.z = [None for _ in range(n_tasks)]
+            self.lam = [None for _ in range(n_tasks)]
+            self.rho = [None for _ in range(n_tasks)]
 
         for i in range(n_tasks):
             # Priority of task i.
