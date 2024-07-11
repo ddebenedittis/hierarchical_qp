@@ -132,7 +132,7 @@ def null_space_projector(A):
 class HierarchicalQP:
     def __init__(
         self, solver: QPSolver = QPSolver.quadprog,
-        hierarchical = False
+        hierarchical = True
     ):
         # Small number used to make H positive definite.
         self._regularization = 1e-6
@@ -542,17 +542,17 @@ class HierarchicalQP:
                 
             H_tot[0:nx, 0:nx] += Ap.transpose() @ Ap * wep**2
             p_tot[0:nx] += - Ap.transpose() @ bp * wep**2
-            if wip is not np.Inf:
+            if wip is not np.inf:
                 H_tot[nx+i_slack:nx+i_slack+Cp.shape[0], nx+i_slack:nx+i_slack+Cp.shape[0]] = np.eye(Cp.shape[0]) * wip**2
             
-            if wep is np.Inf and Ap is not None:
+            if wep is np.inf and Ap is not None:
                 A_tot[ie:ie+Ap.shape[0], 0:nx] = Ap
                 b_tot[ie:ie+Ap.shape[0]] = bp
                 ie += Ap.shape[0]
             if Cp is not None:
                 C_tot[ii:ii+Cp.shape[0], 0:nx] = Cp
                 d_tot[ii:ii+Cp.shape[0]] = dp
-                if wip is not np.Inf:
+                if wip is not np.inf:
                     C_tot[ii:ii+Cp.shape[0], nx+i_slack:nx+i_slack+Cp.shape[0]] = - np.eye(Cp.shape[0])
                     i_slack += Cp.shape[0]
                     
