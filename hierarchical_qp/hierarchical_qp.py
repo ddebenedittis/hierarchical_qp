@@ -8,9 +8,9 @@ try:
     from torch import device as t_device
     from torch.cuda import is_available
     import reluqp.reluqpth as reluqp
-    torch_available = True
+    TORCH_AVAILABLE = True
 except ImportError:
-    torch_available = False
+    TORCH_AVAILABLE = False
 
 
 
@@ -62,8 +62,8 @@ class QPSolver(Enum):
         if solver == 'reluqp':
             return QPSolver.reluqp
         
-        raise ValueError('The input solver is {solver}. Acceptable values are ' +
-                         'clarabel, osqp, proxqp, quadprog, and reluqp.')
+        raise ValueError(f"The input solver is {solver}. Acceptable values are " +
+                         f"clarabel, osqp, proxqp, quadprog, and reluqp.")
         
 
 
@@ -82,54 +82,54 @@ def null_space_projector(A):
 #               HIERARCHICAL QUADRATIC PROGRAMMING IMPLEMENTATION              #
 # ============================================================================ #
 
-# A general task T can be defined as
-#       [ we * (A x - b)  = v
-#   T = [
-#       [ wi * (C x - d) <= w
-
-# where v and w are slack variables.
-
-# Is is formulated as a QP problem
-#   min_x 1/2 (A x - b)^2 + 1/2 w^2
-#   s.t.: C x - d <= w
-
-
-# It can be rewritten in the general QP form:
-#   min_x 1/2 xi^T H xi + p^T xi
-#   s.t: CI xi + ci0 >= 0
-
-# where:
-#   H   =   A^T A
-#   p   = - A^T b
-#   CI  = [ -C, 0 ]
-#         [  0, I ]
-#   ci0 = [ d ]
-#         [ 0 ]
-#   xi  = [ x ]
-#         [ w ]
-
-# ============================================================================
-
-# Given a set of tasks T1, ..., Tn, for the task Tp the QP problem becomes:
-#   H   = [ Zq^T Ap^T Ap Zq, 0 ]
-#         [               0, I ]
-#   p   = [ Zq^T Ap^T (Ap x_opt - bp) ]
-#         [                         0 ]
-
-#   CI  = [   0,       I      ]
-#         [ - C_stack, [0; I] ]
-#   ci0 = [ 0                                    ]
-#         [ d - C_stack x_opt + [w_opt_stack; 0] ]
-
-# The solution of the task with priority p is x_p_star
-
-# The solution of the tasks with priority equal or smaller that p+1 is
-# x_p+1_star_bar = x_p_star_bar + Z @ x_p+1_star
-
 
 # ============================================================================ #
 
 class HierarchicalQP:
+    """
+    A general task T can be defined as
+          [ we * (A x - b)  = v
+      T = |
+          [ wi * (C x - d) <= w
+
+    where v and w are slack variables.
+
+    Is is formulated as a QP problem
+      min_x 1/2 (A x - b)^2 + 1/2 w^2
+      s.t.: C x - d <= w
+
+
+    It can be rewritten in the general QP form:
+      min_x 1/2 xi^T H xi + p^T xi
+      s.t: CI xi + ci0 >= 0
+
+    where:
+      H   =   A^T A
+      p   = - A^T b
+      CI  = [ -C, 0 ]
+            [  0, I ]
+      ci0 = [ d ]
+            [ 0 ]
+      xi  = [ x ]
+            [ w ]
+
+    Given a set of tasks T1, ..., Tn, for the task Tp the QP problem becomes:
+      H   = [ Zq^T Ap^T Ap Zq, 0 ]
+            [               0, I ]
+      p   = [ Zq^T Ap^T (Ap x_opt - bp) ]
+            [                         0 ]
+
+      CI  = [   0,       I      ]
+            [ - C_stack, [0; I] ]
+      ci0 = [ 0                                    ]
+            [ d - C_stack x_opt + [w_opt_stack; 0] ]
+
+    The solution of the task with priority p is x_p_star
+
+    The solution of the tasks with priority equal or smaller that p+1 is
+    x_p+1_star_bar = x_p_star_bar + Z @ x_p+1_star
+    """
+    
     def __init__(
         self, solver: QPSolver = QPSolver.quadprog,
         hierarchical = True
@@ -138,7 +138,7 @@ class HierarchicalQP:
         self._regularization = 1e-6
         
         self._solver = solver
-        if not torch_available and self._solver.to_string() == "reluqp":
+        if not TORCH_AVAILABLE and self._solver.to_string() == "reluqp":
             raise ValueError("The solver cannot be ReluQP if torch and others "
                              "are not available.")
         
@@ -155,13 +155,10 @@ class HierarchicalQP:
     
     @regularization.setter
     def regularization(self, value):
-        try:
-            if float(value) < 0:
-                raise ValueError()
+        if float(value) < 0:
+            raise ValueError('"regularization" must be a positive number')
                 
-            self._regularization = float(value)
-        except ValueError:
-            raise ValueError('"regularization" must be a positive number') from None
+        self._regularization = float(value)
         
     @property
     def solver(self):
@@ -169,7 +166,7 @@ class HierarchicalQP:
     
     @solver.setter
     def solver(self, value):
-        if not torch_available and self._solver.to_string() == "reluqp":
+        if not TORCH_AVAILABLE and self._solver.to_string() == "reluqp":
             raise ValueError("The solver cannot be ReluQP if torch and others "
                              "are not available.")
         
