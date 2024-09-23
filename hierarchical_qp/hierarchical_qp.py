@@ -537,8 +537,9 @@ class HierarchicalQP:
             wep = we[priority]
             wip = wi[priority]
                 
-            H_tot[0:nx, 0:nx] += Ap.transpose() @ Ap * wep**2
-            p_tot[0:nx] += - Ap.transpose() @ bp * wep**2
+            if wep is not np.inf:
+                H_tot[0:nx, 0:nx] += Ap.transpose() @ Ap * wep**2
+                p_tot[0:nx] += - Ap.transpose() @ bp * wep**2
             if wip is not np.inf:
                 H_tot[nx+i_slack:nx+i_slack+Cp.shape[0], nx+i_slack:nx+i_slack+Cp.shape[0]] = np.eye(Cp.shape[0]) * wip**2
             
