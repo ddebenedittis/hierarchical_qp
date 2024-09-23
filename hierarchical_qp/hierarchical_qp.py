@@ -132,7 +132,7 @@ class HierarchicalQP:
     
     def __init__(
         self, solver: QPSolver = QPSolver.quadprog,
-        hierarchical = True
+        hierarchical = True,
     ):
         # Small number used to make H positive definite.
         self._regularization = 1e-6
@@ -148,7 +148,7 @@ class HierarchicalQP:
         self.z = None
         self.lam = None
         self.rho = None
-                        
+        
     @property
     def regularization(self):
         return self._regularization
@@ -555,7 +555,7 @@ class HierarchicalQP:
                     
                 ii += Cp.shape[0]
             
-        
+        H_tot += self._regularization * np.eye(H_tot.shape[0])
         sol = solve_qp(H_tot, p_tot, C_tot, d_tot, A_tot, b_tot, solver=self._solver.to_string())
                 
         return sol[0:nx]
