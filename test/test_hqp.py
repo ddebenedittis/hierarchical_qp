@@ -1,6 +1,7 @@
 import numpy as np
 
 from hierarchical_qp.hierarchical_qp import QPSolver, HierarchicalQP
+from qpsolvers.exceptions import SolverNotFound
 
 
 def check_array_similarity(
@@ -25,13 +26,21 @@ def test_solvers():
     
     sol_quadprog = hqp_quadprog(A, b, C, d)
     
+    solver_found = False
     for solver in QPSolver:
-        hqp_2 = HierarchicalQP(solver)
-        sol_2 = hqp_2(A, b, C, d)
-    
-        assert check_array_similarity(sol_quadprog, sol_2), \
-            'The solutions with only equality constraints between the ' \
-            f'{QPSolver.quadprog} and {solver} solvers differ.'
+        try:
+            hqp_2 = HierarchicalQP(solver)
+            sol_2 = hqp_2(A, b, C, d)
+        
+            assert check_array_similarity(sol_quadprog, sol_2), \
+                'The solutions with only equality constraints between the ' \
+                f'{QPSolver.quadprog} and {solver} solvers differ.'
+                
+            solver_found = True
+        except (SolverNotFound, ValueError):
+            pass
+        
+    assert solver_found, 'No QP solver was found.'
             
     # A = [np.diag([0, 0, 0]), None]
     # b = [np.array([0, 0, 0]), None]
