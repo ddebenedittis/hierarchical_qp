@@ -77,6 +77,23 @@ def null_space_projector(A):
     return N
 
 
+def compute_null_space(A, threshold=1e-6):
+    """
+    Compute an orthonormal basis for the null space of A using SVD.
+    """
+    
+    _, s, Vt = np.linalg.svd(A, full_matrices=True)
+    
+    rank = np.sum(s >= threshold)
+    ns_dim = A.shape[1] - rank
+    
+    V = Vt.T
+    
+    N = V[:, -ns_dim:] if ns_dim > 0 else np.empty((V.shape[0], 0))
+    
+    return N
+
+
 
 # ============================================================================ #
 #               HIERARCHICAL QUADRATIC PROGRAMMING IMPLEMENTATION              #
@@ -360,6 +377,8 @@ class HierarchicalQP:
 
         # Dimension of the optimization vector.
         nx = A[0].shape[1]
+        
+        nf = nx
 
         # Optimization vector.
         x_star_bar = np.zeros(nx)
@@ -415,8 +434,8 @@ class HierarchicalQP:
 
             if Ap.size != 0:
                 H = np.block([
-                    [Z.T @ Ap.T @ Ap @ Z,  np.zeros([nx,nw])],
-                    [  np.zeros([nw,nx]),         np.eye(nw)],
+                    [Z.T @ Ap.T @ Ap @ Z,  np.zeros([nf,nw])],
+                    [  np.zeros([nw,nf]),         np.eye(nw)],
                 ])
 
                 p = np.block([
@@ -425,11 +444,11 @@ class HierarchicalQP:
                 ])
             else:
                 H = np.block([
-                    [np.zeros([nx,nx]),  np.zeros([nx,nw])],
-                    [np.zeros([nw,nx]),         np.eye(nw)],
+                    [np.zeros([nf,nf]),  np.zeros([nf,nw])],
+                    [np.zeros([nw,nf]),         np.eye(nw)],
                 ])
 
-                p = np.zeros(nx+nw)
+                p = np.zeros(nf+nw)
                 
             # Make H positive definite
             H = H + self._regularization * np.eye(H.shape[0])
@@ -439,7 +458,7 @@ class HierarchicalQP:
             nC2 = np.concatenate(C[0:priority+1]).shape[0]
 
             C_tilde = np.block([
-                [                  np.zeros([nw,nx]),         - np.eye(nw)],
+                [                  np.zeros([nw,nf]),         - np.eye(nw)],
                 [np.concatenate(C[0:priority+1]) @ Z,   np.zeros([nC2,nw])],
             ])
             if nw > 0:
@@ -447,7 +466,7 @@ class HierarchicalQP:
 
             # w_star_arr = [w_star[priority], w_star[priority-1], ..., w_star[0]]
             w_star_arr = np.concatenate(w_star_bar[:])
-
+            
             d_tilde = np.block([
                 np.zeros(nw),
                 np.concatenate(d[0:priority+1]) \
@@ -471,23 +490,25 @@ class HierarchicalQP:
             # ======================== Post-processing ======================= #
 
             # Extract x_star from the solution.
-            x_star = sol[0:nx]
+            x_star = sol[0:nf]
             
             # Update the solution of all the tasks up to now.
             x_star_bar = x_star_bar + Z @ x_star
 
             # Store the history of w_star
             if priority == 0:
-                w_star_bar = [sol[nx:]]
+                w_star_bar = [sol[nf:]]
             else:
-                w_star_bar.append(sol[nx:])
+                w_star_bar.append(sol[nf:])
 
             # Compute the new null space projector (skipped at the last iteration).
             if ((Ap.shape[0] != 0) and (priority != n_tasks - 1)):
-                Z = Z @ null_space_projector(Ap @ Z)
+                # Z = Z @ null_space_projector(Ap @ Z)
+                Z = Z @ compute_null_space(Ap @ Z)
+                nf = Z.shape[1]
                 
             # End the loop if Z is the null matrix.
-            if not np.any((Z > self.regularization) | (Z < -self.regularization)):
+            if (not np.any((Z > self.regularization) | (Z < -self.regularization))) or nf == 0:
                 return x_star_bar
 
         return x_star_bar
