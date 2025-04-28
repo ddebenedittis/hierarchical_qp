@@ -161,6 +161,8 @@ class HierarchicalQP:
         
         self.hierarchical = hierarchical
         
+        self.verbose = False
+        
         self.x = None
         self.z = None
         self.lam = None
@@ -340,7 +342,8 @@ class HierarchicalQP:
             else:
                 sol = solve_qp(H, p, C, d, solver=self._solver.to_string(), **self._solver.get_solver_opts())
             if sol is None:
-                print(f"At priority {priority}: no solution.")
+                if self.verbose:
+                    print(f"At priority {priority}: no solution.")
                 return None
                 
         return sol
