@@ -208,7 +208,9 @@ class HierarchicalQP:
         
         n_tasks = len(A)
         
-        nx = next((matrix.shape[1] for matrix in A if matrix is not None and matrix.size > 0), 0)
+        nx = next((matrix.shape[1] for matrix in A if matrix is not None and matrix.size > 0), None)
+        if nx is None:
+            nx = next((matrix.shape[1] for matrix in C if matrix is not None and matrix.size > 0), None)
         
         # Convert empty matrices or None into empty matrices of opportune size.
         for i in range(n_tasks):
